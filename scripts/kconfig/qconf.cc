@@ -6,6 +6,7 @@
 #include <qglobal.h>
 
 #if QT_VERSION < 0x040000
+#include <stddef.h>
 #include <qmainwindow.h>
 #include <qvbox.h>
 #include <qvaluelist.h>
@@ -66,6 +67,11 @@ static inline QString qgettext(const char* str)
 static inline QString qgettext(const QString& str)
 {
 	return QString::fromLocal8Bit(gettext(str.latin1()));
+}
+
+ConfigSettings::ConfigSettings()
+	: QSettings("kernel.org", "qconf")
+{
 }
 
 /**
@@ -1478,10 +1484,13 @@ void ConfigMainWindow::loadConfig(void)
 	ConfigView::updateListAll();
 }
 
-void ConfigMainWindow::saveConfig(void)
+bool ConfigMainWindow::saveConfig(void)
 {
-	if (conf_write(NULL))
+	if (conf_write(NULL)) {
 		QMessageBox::information(this, "qconf", _("Unable to save configuration!"));
+		return false;
+	}
+	return true;
 }
 
 void ConfigMainWindow::saveConfigAs(void)
@@ -1642,7 +1651,11 @@ void ConfigMainWindow::closeEvent(QCloseEvent* e)
 	mb.setButtonText(QMessageBox::Cancel, _("Cancel Exit"));
 	switch (mb.exec()) {
 	case QMessageBox::Yes:
-		saveConfig();
+		if (saveConfig())
+			e->accept();
+		else
+			e->ignore();
+		break;
 	case QMessageBox::No:
 		e->accept();
 		break;
@@ -1733,7 +1746,7 @@ static const char *progname;
 
 static void usage(void)
 {
-	printf(_("%s <config>\n"), progname);
+	printf(_("%s [-s] <config>\n"), progname);
 	exit(0);
 }
 
@@ -1745,14 +1758,13 @@ int main(int ac, char** av)
 	bindtextdomain(PACKAGE, LOCALEDIR);
 	textdomain(PACKAGE);
 
-#ifndef LKC_DIRECT_LINK
-	kconfig_load();
-#endif
-
 	progname = av[0];
 	configApp = new QApplication(ac, av);
 	if (ac > 1 && av[1][0] == '-') {
 		switch (av[1][1]) {
+		case 's':
+			conf_set_message_callback(NULL);
+			break;
 		case 'h':
 		case '?':
 			usage();
